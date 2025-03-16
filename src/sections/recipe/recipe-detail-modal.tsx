@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -13,9 +13,8 @@ import {
   Snackbar,
   Alert,
 } from '@mui/material';
-import { IngredientData, RecipeDetailResponse, Ingredient } from 'src/models/recipe';
-import { deleteIngredentItem } from 'src/services/recipeService';
-import { Iconify } from 'src/components/iconify';
+import { Ingredient, RecipeDetailResponse } from 'src/models/recipe';
+import { deleteIngredentItem, fetchRecipeDetail } from 'src/services/recipeService';
 import { IngredientFormModal } from './view/ingredient-form-modal';
 
 interface RecipeDetailModalProps {
@@ -36,18 +35,24 @@ export function RecipeDetailModal({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [formOpen, setFormOpen] = useState(false);
-  const [selectedIngredient, setSelectedIngredient] = useState<IngredientData | null>(null);
+  const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
+  const [recipeDetail, setRecipeDetail] = useState<RecipeDetailResponse | null>(item);
 
-  const handleOpenForm = () => {
-    setFormOpen(true);
-  };
-
-  const handleCloseForm = () => {
-    setFormOpen(false);
-  };
+  useEffect(() => {
+    if (open && item) {
+      fetchRecipeDetail(item.recipe.id)
+        .then((data) => setRecipeDetail(data))
+        .catch((error) => console.error('Failed to fetch updated recipe:', error));
+    }
+  }, [open, item]);
 
   const handleSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity });
+  };
+
+  const handleEdit = (ingredient: Ingredient) => {
+    setSelectedIngredient(ingredient);
+    setFormOpen(true);
   };
 
   const handleSnackbarClose = () => {
@@ -59,23 +64,21 @@ export function RecipeDetailModal({
     setConfirmOpen(true);
   };
 
-  const handleEdit = (data: Ingredient) => {
-    console.log(data);
-  };
-
   const handleDeleteConfirm = async () => {
     if (selectedId !== null) {
       setLoading(true);
       try {
         await deleteIngredentItem(selectedId);
-        onDeleteSuccess(); // 🔥 Refresh data setelah delete
-        handleSnackbar('Bahan berhasil dihapus!', 'success'); // 🔥 Tampilkan Snackbar sukses
+        const updatedData = await fetchRecipeDetail(recipeDetail?.recipe.id ?? 0);
+        setRecipeDetail(updatedData);
+        handleSnackbar('Bahan berhasil dihapus!', 'success');
+        onDeleteSuccess();
       } catch (error) {
         console.error('Gagal menghapus bahan:', error);
-        handleSnackbar('Gagal menghapus bahan.', 'error'); // 🔥 Tampilkan Snackbar error
+        handleSnackbar('Gagal menghapus bahan.', 'error');
       } finally {
         setLoading(false);
-        setConfirmOpen(false); // 🔥 Tutup dialog konfirmasi
+        setConfirmOpen(false);
         setSelectedId(null);
       }
     }
@@ -86,7 +89,7 @@ export function RecipeDetailModal({
       <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
         <DialogTitle>Detail Recipe</DialogTitle>
         <DialogContent>
-          {item ? (
+          {recipeDetail ? (
             <>
               <Table>
                 <TableBody>
@@ -94,19 +97,19 @@ export function RecipeDetailModal({
                     <TableCell>
                       <strong>Name</strong>
                     </TableCell>
-                    <TableCell>{item.recipe.name}</TableCell>
+                    <TableCell>{recipeDetail.recipe.name}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>
                       <strong>SKU</strong>
                     </TableCell>
-                    <TableCell>{item.recipe.sku}</TableCell>
+                    <TableCell>{recipeDetail.recipe.sku}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>
                       <strong>COGS</strong>
                     </TableCell>
-                    <TableCell>{item.recipe.cogs}</TableCell>
+                    <TableCell>{recipeDetail.recipe.cogs}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -123,8 +126,10 @@ export function RecipeDetailModal({
                 <Button
                   variant="contained"
                   color="primary"
-                  startIcon={<Iconify icon="mingcute:add-line" />}
-                  onClick={handleOpenForm}
+                  onClick={() => {
+                    setSelectedIngredient(null);
+                    setFormOpen(true);
+                  }}
                 >
                   Add
                 </Button>
@@ -134,15 +139,17 @@ export function RecipeDetailModal({
                   <TableRow>
                     <TableCell>Name</TableCell>
                     <TableCell>Quantity</TableCell>
+                    <TableCell>UOM</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {item.ingredients.length > 0 ? (
-                    item.ingredients.map((ingredient) => (
+                  {recipeDetail?.ingredients?.length > 0 ? (
+                    recipeDetail.ingredients.map((ingredient) => (
                       <TableRow key={ingredient.id}>
-                        <TableCell>{ingredient.item}</TableCell>
-                        <TableCell>{ingredient.quantity}</TableCell>
+                        <TableCell>{ingredient.item || '-'}</TableCell>
+                        <TableCell>{ingredient.quantity || '0'}</TableCell>
+                        <TableCell>{ingredient.uom || '-'}</TableCell>
                         <TableCell>
                           <Button
                             color="error"
@@ -163,7 +170,7 @@ export function RecipeDetailModal({
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} align="center">
+                      <TableCell colSpan={4} align="center" style={{ color: 'red' }}>
                         Ingredients not found
                       </TableCell>
                     </TableRow>
@@ -179,6 +186,19 @@ export function RecipeDetailModal({
           <Button onClick={onClose}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Modal untuk tambah/edit bahan */}
+      <IngredientFormModal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        recipeId={recipeDetail?.recipe.id ?? 0}
+        ingredient={selectedIngredient}
+        onSaveSuccess={async () => {
+          setFormOpen(false);
+          const updatedData = await fetchRecipeDetail(recipeDetail?.recipe.id ?? 0);
+          setRecipeDetail(updatedData);
+        }}
+      />
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>Konfirmasi Penghapusan</DialogTitle>
@@ -200,16 +220,6 @@ export function RecipeDetailModal({
           {snackbar.message}
         </Alert>
       </Snackbar>
-
-      <IngredientFormModal
-        open={formOpen}
-        onClose={handleCloseForm}
-        recipeId={item?.recipe.id ?? 0}
-        onSaveSuccess={() => {
-          handleCloseForm();
-          onDeleteSuccess();
-        }}
-      />
     </>
   );
 }

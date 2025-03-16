@@ -36,7 +36,6 @@ export function RecipeView() {
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [searchQuery, setSearchQuery] = useState('');
   const [tempSearch, setTempSearch] = useState('');
-  const [sortField, setSortField] = useState<'name'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RecipeItem | null>(null);
@@ -46,15 +45,17 @@ export function RecipeView() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedDetailItem, setSelectedDetailItem] = useState<RecipeDetailResponse | null>(null);
 
+  // Handle Snackbar Notifications
   const handleSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info') => {
     setSnackbar({ open: true, message, severity });
   };
 
+  // Fetch Recipes
   const loadRecipes = useCallback(async () => {
     try {
       const response = await fetchRecipe(page + 1, rowsPerPage, searchQuery, sortOrder, 'name');
-      setRecipes(response.data);
-      setMeta(response.meta);
+      setRecipes(response.data || []); // Pastikan tidak null
+      setMeta(response.meta || { totalData: 0, totalPages: 0, current_page: 1 });
     } catch (error) {
       console.error('Failed to load recipes:', error);
     }
@@ -64,6 +65,7 @@ export function RecipeView() {
     loadRecipes();
   }, [loadRecipes]);
 
+  // Handle Search
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       setSearchQuery(tempSearch);
@@ -71,16 +73,20 @@ export function RecipeView() {
     }
   };
 
+  // Handle Add Recipe
+  const handleAdd = () => {
+    console.log('Tambah Resep diklik!'); // Debugging
+    setSelectedItem(null);
+    setModalOpen(true);
+  };
+
+  // Handle Edit Recipe
   const handleEdit = (item: RecipeItem) => {
     setSelectedItem(item);
     setModalOpen(true);
   };
 
-  const handleAdd = () => {
-    setSelectedItem(null);
-    setModalOpen(true);
-  };
-
+  // Handle Delete Recipe
   const handleDeleteConfirm = (id: number) => {
     setDeleteId(id);
     setDeleteConfirmOpen(true);
@@ -97,7 +103,7 @@ export function RecipeView() {
         await deleteRecipeItem(deleteId);
         setRecipes((prevRecipes) => prevRecipes.filter((item) => item.id !== deleteId));
         handleSnackbar('Resep berhasil dihapus!', 'success');
-        loadRecipes(); // Refresh data setelah penghapusan
+        loadRecipes();
       } catch (error) {
         console.error('Failed to delete recipe:', error);
         handleSnackbar('Gagal menghapus resep.', 'error');
@@ -109,17 +115,15 @@ export function RecipeView() {
   };
 
   const handleSort = () => {
-    const isAsc = sortField === 'name' && sortOrder === 'asc';
-    setSortOrder(isAsc ? 'desc' : 'asc');
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
   };
 
   const handleView = async (item: RecipeItem) => {
     try {
-      const response = await fetchRecipeDetail(item.id); // 🔥 Ambil detail resep dan bahan-bahannya
-      setSelectedDetailItem(response); // 🔥 Simpan ke state
-      setDetailModalOpen(true); // 🔥 Buka modal setelah data siap
+      const response = await fetchRecipeDetail(item.id);
+      setSelectedDetailItem(response);
+      setDetailModalOpen(true);
     } catch (error) {
-      console.error('Gagal mengambil detail resep:', error);
       handleSnackbar('Gagal mengambil detail resep.', 'error');
     }
   };
@@ -132,6 +136,7 @@ export function RecipeView() {
         severity={snackbar.severity as any}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
       />
+
       <Box display="flex" alignItems="center" mb={5}>
         <Typography variant="h4" flexGrow={1}>
           Resep
@@ -161,16 +166,12 @@ export function RecipeView() {
           sx={{ maxWidth: 320, my: 3, ml: 5 }}
         />
         <Scrollbar>
-          <TableContainer sx={{ overflow: 'unset' }}>
-            <Table sx={{ minWidth: 800 }}>
+          <TableContainer>
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableCell>
-                    <TableSortLabel
-                      active={sortField === 'name'}
-                      direction={sortOrder}
-                      onClick={handleSort}
-                    >
+                    <TableSortLabel active direction={sortOrder} onClick={handleSort}>
                       NAME RECIPE
                     </TableSortLabel>
                   </TableCell>
@@ -180,53 +181,36 @@ export function RecipeView() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {recipes.map((row) => (
-                  <RecipeTableRow
-                    key={row.id}
-                    row={row}
-                    onEdit={handleEdit}
-                    onDelete={() => handleDeleteConfirm(row.id)}
-                    onView={handleView}
-                  />
-                ))}
-                {recipes.length === 0 && <TableNoData searchQuery={searchQuery} />}
+                {recipes.length > 0 ? (
+                  recipes.map((row) => (
+                    <RecipeTableRow
+                      key={row.id}
+                      row={row}
+                      onEdit={handleEdit}
+                      onDelete={() => handleDeleteConfirm(row.id)}
+                      onView={handleView}
+                    />
+                  ))
+                ) : (
+                  <TableNoData searchQuery={searchQuery} />
+                )}
               </TableBody>
             </Table>
           </TableContainer>
         </Scrollbar>
-
-        <TablePagination
-          component="div"
-          page={page}
-          count={meta.totalData}
-          rowsPerPage={rowsPerPage}
-          onPageChange={(event, newPage) => setPage(newPage)}
-          rowsPerPageOptions={[5, 10, 25]}
-          onRowsPerPageChange={(event) => setRowsPerPage(parseInt(event.target.value, 10))}
-        />
       </Card>
 
       <RecipeModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         item={selectedItem}
-        onSuccess={(message) => {
-          loadRecipes();
-          handleSnackbar(message, 'success');
-        }}
+        onSuccess={loadRecipes}
       />
-
       <RecipeDetailModal
         open={detailModalOpen}
         onClose={() => setDetailModalOpen(false)}
         item={selectedDetailItem}
-        onDeleteSuccess={() => {
-          if (selectedDetailItem) {
-            fetchRecipeDetail(selectedDetailItem.recipe.id)
-              .then((updatedData) => setSelectedDetailItem(updatedData))
-              .catch((error) => console.error('Failed to refresh data:', error));
-          }
-        }}
+        onDeleteSuccess={loadRecipes}
       />
 
       <Dialog open={deleteConfirmOpen} onClose={handleDeleteCancel}>

@@ -7,9 +7,11 @@ export interface RecipeItem {
 
 export interface Ingredient {
   id: number;
+  name: string;
   inventory_id: number;
   quantity: number;
   item: string;
+  uom: string;
 }
 
 export interface RecipeDetailResponse {

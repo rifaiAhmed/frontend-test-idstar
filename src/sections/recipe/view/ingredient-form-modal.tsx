@@ -13,11 +13,17 @@ import { addIngredientItem, updateIngredientItem } from 'src/services/recipeServ
 import { fetchInventory } from 'src/services/inventoryService';
 import { Ingredient } from 'src/models/recipe';
 
+interface InventoryItem {
+  id: number;
+  name: string;
+  uom: string;
+}
+
 interface IngredientFormModalProps {
   open: boolean;
   onClose: () => void;
   recipeId: number;
-  ingredient?: { id: number; name: string; quantity: string; inventoryId: number } | null;
+  ingredient?: Ingredient | null;
   onSaveSuccess: () => void;
 }
 
@@ -31,8 +37,9 @@ export function IngredientFormModal({
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [inventoryId, setInventoryId] = useState<number | null>(null);
+  const [uom, setUom] = useState('');
   const [loading, setLoading] = useState(false);
-  const [inventoryList, setInventoryList] = useState<Ingredient[]>([]);
+  const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(false);
 
   useEffect(() => {
@@ -40,12 +47,10 @@ export function IngredientFormModal({
       setLoadingInventory(true);
       fetchInventory(1, 100, '', 'asc', 'id')
         .then((res) => {
-          const data: Ingredient[] = res.data.map((item: any) => ({
+          const data: InventoryItem[] = res.data.map((item: any) => ({
             id: item.id,
-            name: item.item, // Ubah dari `item` ke `name`
-            item: item.item, // Tambahkan properti `item`
-            inventory_id: item.id, // Gunakan ID inventory
-            quantity: item.qty.toString(), // Ubah `qty` ke `quantity` dan ubah ke string
+            name: item.item,
+            uom: item.uom || '',
           }));
           setInventoryList(data);
         })
@@ -55,16 +60,20 @@ export function IngredientFormModal({
   }, [open]);
 
   useEffect(() => {
-    if (ingredient) {
-      setName(ingredient.name);
-      setQuantity(ingredient.quantity);
-      setInventoryId(ingredient.inventoryId);
-    } else {
-      setName('');
-      setQuantity('');
-      setInventoryId(null);
+    if (open) {
+      if (ingredient) {
+        setName(ingredient.item); // 'item' digunakan sebagai nama bahan
+        setQuantity(ingredient.quantity.toString());
+        setInventoryId(ingredient.inventory_id);
+        setUom(ingredient.uom || '');
+      } else {
+        setName('');
+        setQuantity('');
+        setInventoryId(null);
+        setUom('');
+      }
     }
-  }, [ingredient]);
+  }, [open, ingredient]);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -98,16 +107,19 @@ export function IngredientFormModal({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>{ingredient ? 'Edit Ingredient' : 'Add Ingredient'}</DialogTitle>
+      <DialogTitle>
+        {ingredient && ingredient.id > 0 ? 'Edit Ingredient' : 'Add Ingredient'}
+      </DialogTitle>
       <DialogContent>
         <Autocomplete
           options={inventoryList}
-          getOptionLabel={(option) => option.item} // Gunakan `name`
+          getOptionLabel={(option) => option.name}
           value={inventoryList.find((item) => item.id === inventoryId) || null}
           onChange={(_, newValue) => {
             if (newValue) {
               setInventoryId(newValue.id);
-              setName(newValue.item);
+              setName(newValue.name);
+              setUom(newValue.uom || '');
             }
           }}
           loading={loadingInventory}
@@ -128,6 +140,15 @@ export function IngredientFormModal({
               }}
             />
           )}
+        />
+        <TextField
+          fullWidth
+          label="UOM"
+          value={uom}
+          margin="dense"
+          InputProps={{
+            readOnly: true,
+          }}
         />
 
         <TextField

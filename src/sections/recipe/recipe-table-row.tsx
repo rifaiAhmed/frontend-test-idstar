@@ -16,7 +16,7 @@ export function RecipeTableRow({ row, onEdit, onDelete, onView }: RecipeTableRow
       <TableCell>{row.cogs}</TableCell>
       <TableCell>
         <Button variant="contained" color="info" onClick={() => onView(row)} sx={{ mr: 1 }}>
-          Lihat Detail
+          View Detail
         </Button>
         <Button variant="outlined" color="primary" onClick={() => onEdit(row)} sx={{ mr: 1 }}>
           Edit
